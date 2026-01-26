@@ -5,8 +5,9 @@ import Attendance from './pages/Attendance';
 import Students from './pages/Students';
 import HistoryPage from './pages/History';
 import AIAssistant from './pages/AIAssistant';
+import Leads from './pages/Leads';
 import Home from './pages/Home';
-import { Student, AttendanceRecord } from './types';
+import { Student, AttendanceRecord, Lead, LeadStatus } from './types';
 import { Menu, AlertTriangle, Loader2 } from 'lucide-react';
 
 import { supabase } from './services/supabaseClient';
@@ -20,6 +21,7 @@ const App: React.FC = () => {
   
   const [students, setStudents] = useState<Student[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -55,6 +57,12 @@ const App: React.FC = () => {
           ]);
           setStudents(studentsData || []);
           setAttendanceRecords(attendanceData || []);
+          
+          // Initialize mock leads if no API exists yet
+          setLeads([
+            { id: '1', name: 'John Doe', phone: '+91 9876543210', course: 'Artificial Intelligence', status: LeadStatus.NEW, next_follow_up: '2025-05-10', notes: ['Interested in weekend batches'] },
+            { id: '2', name: 'Sarah Connor', phone: '+91 8877665544', course: 'Data Science', status: LeadStatus.CONTACTED, next_follow_up: '2025-05-12', notes: ['Wants details about internship placement'] }
+          ]);
         } catch (error) {
           console.error("Failed to fetch initial data:", error);
         }
@@ -63,6 +71,7 @@ const App: React.FC = () => {
     } else {
       setStudents([]);
       setAttendanceRecords([]);
+      setLeads([]);
     }
   }, [session]);
 
@@ -72,12 +81,21 @@ const App: React.FC = () => {
         await AttendanceAPI.deleteSession(editingSessionData.date, editingSessionData.timestamp);
         setEditingSessionData(null);
       }
-      const savedRecords = await AttendanceAPI.saveBatch(newRecords);
+      await AttendanceAPI.saveBatch(newRecords);
       const freshRecords = await AttendanceAPI.getAll();
       setAttendanceRecords(freshRecords);
     } catch (error) {
       console.error("Failed to save attendance:", error);
     }
+  };
+
+  const handleAddLead = (lead: Omit<Lead, 'id'>) => {
+    const newLead: Lead = { ...lead, id: Math.random().toString(36).substr(2, 9) };
+    setLeads(prev => [newLead, ...prev]);
+  };
+
+  const handleUpdateLead = (id: string, updates: Partial<Lead>) => {
+    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
   };
 
   const handleDeleteFolder = async (date: string) => {
@@ -156,6 +174,8 @@ const App: React.FC = () => {
           onDeleteSession={handleDeleteSession}
           onEditSession={handleEditSession}
         />;
+      case 'leads':
+        return <Leads leads={leads} onAdd={handleAddLead} onUpdate={handleUpdateLead} />;
       case 'students':
         return <Students 
           students={students} 

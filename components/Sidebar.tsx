@@ -6,7 +6,8 @@ import {
   LogOut,
   History,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  Briefcase
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -21,6 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, userName, on
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'attendance', label: 'Tracking', icon: CalendarCheck },
     { id: 'history', label: 'Work History', icon: History },
+    { id: 'leads', label: 'Lead Desk', icon: Briefcase },
     { id: 'students', label: 'Students', icon: Users },
   ];
 
@@ -28,7 +30,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, userName, on
     { id: 'ai', label: 'AI Assistant', icon: Sparkles },
   ];
 
-  // Helper to get initials
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -89,7 +90,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, userName, on
       </nav>
 
       <div className="p-4 border-t border-slate-800/50">
-        {/* Profile Card */}
         <div className="mb-4 bg-slate-900/50 rounded-2xl p-3 border border-slate-800/50 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-black text-xs text-white shadow-lg">
             {getInitials(userName || 'User')}
