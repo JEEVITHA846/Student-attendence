@@ -5,13 +5,12 @@ import Attendance from './pages/Attendance';
 import Students from './pages/Students';
 import HistoryPage from './pages/History';
 import AIAssistant from './pages/AIAssistant';
-import Leads from './pages/Leads';
 import Home from './pages/Home';
-import { Student, AttendanceRecord, Lead } from './types';
+import { Student, AttendanceRecord } from './types';
 import { Menu, AlertTriangle, Loader2 } from 'lucide-react';
 
 import { supabase } from './services/supabaseClient';
-import { StudentAPI, AttendanceAPI, LeadAPI } from './services/apiService';
+import { StudentAPI, AttendanceAPI } from './services/apiService';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
@@ -21,7 +20,6 @@ const App: React.FC = () => {
   
   const [students, setStudents] = useState<Student[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -51,14 +49,12 @@ const App: React.FC = () => {
     if (session) {
       const fetchData = async () => {
         try {
-          const [studentsData, attendanceData, leadsData] = await Promise.all([
+          const [studentsData, attendanceData] = await Promise.all([
             StudentAPI.getAll(),
             AttendanceAPI.getAll(),
-            LeadAPI.getAll(),
           ]);
           setStudents(studentsData || []);
           setAttendanceRecords(attendanceData || []);
-          setLeads(leadsData || []);
         } catch (error) {
           console.error("Failed to fetch initial data:", error);
         }
@@ -67,7 +63,6 @@ const App: React.FC = () => {
     } else {
       setStudents([]);
       setAttendanceRecords([]);
-      setLeads([]);
     }
   }, [session]);
 
@@ -119,16 +114,6 @@ const App: React.FC = () => {
     setStudents(prev => prev.filter(s => s.id !== id));
   };
 
-  const handleAddLead = async (lead: Omit<Lead, 'id'>) => {
-    const newLead = await LeadAPI.create(lead);
-    setLeads(prev => [newLead, ...prev]);
-  };
-
-  const handleUpdateLead = async (id: string, updates: Partial<Lead>) => {
-    const updatedLead = await LeadAPI.update(id, updates);
-    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updatedLead } : l));
-  };
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setShowLogoutConfirm(false);
@@ -177,12 +162,6 @@ const App: React.FC = () => {
           onAdd={handleAddStudent} 
           onUpdate={handleUpdateStudent}
           onDelete={handleDeleteStudent} 
-        />;
-      case 'leads':
-        return <Leads 
-          leads={leads}
-          onAdd={handleAddLead}
-          onUpdate={handleUpdateLead}
         />;
       case 'ai':
         return <AIAssistant students={students} attendance={attendanceRecords} />;

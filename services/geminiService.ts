@@ -1,6 +1,6 @@
 
-
 import { GoogleGenAI } from "@google/genai";
+// Updated imports to include Lead type
 import { Student, AttendanceRecord, Lead } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -52,24 +52,18 @@ export const getAIAssistantResponse = async (
 };
 
 /**
- * Generates a follow-up message for a lead.
+ * Generates an AI follow-up message for a lead.
+ * Uses gemini-3-flash-preview for quick drafting.
  */
 export const generateLeadFollowup = async (lead: Lead) => {
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `You are an admissions assistant for Academix.
-    Generate a concise, friendly, and professional follow-up message for a prospective student.
+    contents: `Draft a personalized and professional follow-up message for a potential student.
+    Lead Name: ${lead.name}
+    Course: ${lead.course}
+    Previous Notes: ${lead.notes.join(', ')}
     
-    Lead Details:
-    - Name: ${lead.name}
-    - Course of Interest: ${lead.course}
-    - Last Note: ${lead.notes.length > 0 ? lead.notes[0] : 'No notes available.'}
-    
-    RULES:
-    - Keep the message under 40 words.
-    - The tone should be encouraging and helpful.
-    - Do NOT use markdown.
-    - End with a question to encourage a reply.`,
+    The message should be encouraging and aim to schedule a call or meeting. Keep it concise and professional.`,
   });
   return response.text;
 };
