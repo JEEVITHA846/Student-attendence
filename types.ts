@@ -32,7 +32,7 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
 }
-// FIX: Add missing LeadStatus and Lead types for the Leads page.
+
 export enum LeadStatus {
   NEW = 'New',
   CONTACTED = 'Contacted',

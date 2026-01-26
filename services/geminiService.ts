@@ -1,7 +1,6 @@
 
 
 import { GoogleGenAI } from "@google/genai";
-// FIX: Import the missing Lead type.
 import { Student, AttendanceRecord, Lead } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -52,7 +51,6 @@ export const getAIAssistantResponse = async (
   return response.text;
 };
 
-// FIX: Add the missing generateLeadFollowup function for the Leads page.
 /**
  * Generates a follow-up message for a lead.
  */
