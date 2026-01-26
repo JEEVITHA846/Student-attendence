@@ -1,7 +1,3 @@
-import { Student, AttendanceStatus } from './types';
-
-export const MOCK_STUDENTS: Student[] = [];
-
 export const DEPARTMENTS = ['AIDS-A', 'AIDS-B', 'AIML'];
 export const CLASSES = ['Year-1', 'Year-2', 'Year-3', 'Year-4'];
 export const ELECTIVES = [
