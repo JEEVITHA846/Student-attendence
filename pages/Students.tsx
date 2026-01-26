@@ -20,12 +20,18 @@ const Students: React.FC<StudentsProps> = ({ students, onAdd, onUpdate, onDelete
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    roll_no: string;
+    department: string;
+    year: number;
+    status: 'Active' | 'Inactive';
+  }>({
     name: '',
     roll_no: '',
     department: DEPARTMENTS[0],
     year: 1,
-    status: 'Active' as const
+    status: 'Active'
   });
 
   const handleEditClick = (student: Student) => {
