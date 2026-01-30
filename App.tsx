@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -5,10 +6,9 @@ import Attendance from './pages/Attendance';
 import Students from './pages/Students';
 import HistoryPage from './pages/History';
 import AIAssistant from './pages/AIAssistant';
-import Leads from './pages/Leads';
 import Home from './pages/Home';
-import { Student, AttendanceRecord, Lead, LeadStatus } from './types';
-import { Menu, AlertTriangle, Loader2 } from 'lucide-react';
+import { Student, AttendanceRecord } from './types';
+import { AlertTriangle, Loader2, Menu, LogOut, Bell } from 'lucide-react';
 
 import { supabase } from './services/supabaseClient';
 import { StudentAPI, AttendanceAPI } from './services/apiService';
@@ -18,10 +18,10 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isRecovering, setIsRecovering] = useState(false);
   
   const [students, setStudents] = useState<Student[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -33,13 +33,21 @@ const App: React.FC = () => {
   } | null>(null);
 
   useEffect(() => {
+    // Initial session check
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUserName(session?.user?.user_metadata?.full_name || session?.user?.email || '');
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Listen for auth changes, specifically PASSWORD_RECOVERY
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecovering(true);
+      }
+      if (event === 'SIGNED_OUT') {
+        setIsRecovering(false);
+      }
       setSession(session);
       setUserName(session?.user?.user_metadata?.full_name || session?.user?.email || '');
     });
@@ -48,7 +56,7 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (session) {
+    if (session && !isRecovering) {
       const fetchData = async () => {
         try {
           const [studentsData, attendanceData] = await Promise.all([
@@ -57,23 +65,13 @@ const App: React.FC = () => {
           ]);
           setStudents(studentsData || []);
           setAttendanceRecords(attendanceData || []);
-          
-          // Initialize mock leads if no API exists yet
-          setLeads([
-            { id: '1', name: 'John Doe', phone: '+91 9876543210', course: 'Artificial Intelligence', status: LeadStatus.NEW, next_follow_up: '2025-05-10', notes: ['Interested in weekend batches'] },
-            { id: '2', name: 'Sarah Connor', phone: '+91 8877665544', course: 'Data Science', status: LeadStatus.CONTACTED, next_follow_up: '2025-05-12', notes: ['Wants details about internship placement'] }
-          ]);
         } catch (error) {
           console.error("Failed to fetch initial data:", error);
         }
       };
       fetchData();
-    } else {
-      setStudents([]);
-      setAttendanceRecords([]);
-      setLeads([]);
     }
-  }, [session]);
+  }, [session, isRecovering]);
 
   const handleSaveAttendance = async (newRecords: Omit<AttendanceRecord, 'id'>[]) => {
     try {
@@ -89,13 +87,13 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddLead = (lead: Omit<Lead, 'id'>) => {
-    const newLead: Lead = { ...lead, id: Math.random().toString(36).substr(2, 9) };
-    setLeads(prev => [newLead, ...prev]);
-  };
-
-  const handleUpdateLead = (id: string, updates: Partial<Lead>) => {
-    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+  const handleImportStudents = async (newStudents: Omit<Student, 'id' | 'attendancePercentage'>[]) => {
+    try {
+      const addedStudents = await StudentAPI.createBatch(newStudents);
+      setStudents(prev => [...prev, ...addedStudents]);
+    } catch (error) {
+      console.error("Failed to import students:", error);
+    }
   };
 
   const handleDeleteFolder = async (date: string) => {
@@ -118,7 +116,7 @@ const App: React.FC = () => {
 
   const handleAddStudent = async (student: Omit<Student, 'id' | 'attendancePercentage'>) => {
     const newStudent = await StudentAPI.create(student);
-    setStudents(prev => [newStudent, ...prev]);
+    setStudents(prev => [...prev, newStudent]);
   };
 
   const handleUpdateStudent = async (id: string, updates: Partial<Student>) => {
@@ -136,6 +134,7 @@ const App: React.FC = () => {
     await supabase.auth.signOut();
     setShowLogoutConfirm(false);
     setActiveTab('dashboard');
+    setIsRecovering(false);
   };
 
   if (loading) {
@@ -146,8 +145,10 @@ const App: React.FC = () => {
     );
   }
 
-  if (!session) {
-    return <Home />;
+  // If we are recovering a password, force the Home component to stay mounted
+  // regardless of whether there is a session or not.
+  if (!session || isRecovering) {
+    return <Home initialView={isRecovering ? 'update-password' : 'auth'} onCompleteRecovery={() => setIsRecovering(false)} />;
   }
 
   const renderContent = () => {
@@ -174,14 +175,13 @@ const App: React.FC = () => {
           onDeleteSession={handleDeleteSession}
           onEditSession={handleEditSession}
         />;
-      case 'leads':
-        return <Leads leads={leads} onAdd={handleAddLead} onUpdate={handleUpdateLead} />;
       case 'students':
         return <Students 
           students={students} 
           onAdd={handleAddStudent} 
           onUpdate={handleUpdateStudent}
           onDelete={handleDeleteStudent} 
+          onImport={handleImportStudents}
         />;
       case 'ai':
         return <AIAssistant students={students} attendance={attendanceRecords} />;
@@ -217,23 +217,50 @@ const App: React.FC = () => {
         />
       </div>
       <main className="flex-1 lg:ml-64 flex flex-col h-screen bg-[#f1f5f9] relative overflow-hidden">
-        <div className="lg:hidden flex items-center justify-between px-6 py-4 bg-white border-b border-slate-100 shrink-0 z-50">
+        <header className="flex items-center justify-between px-6 py-4 lg:px-10 bg-white/80 backdrop-blur-md border-b border-slate-100 shrink-0 z-50 sticky top-0">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2.5 bg-slate-50 text-slate-600 rounded-xl active:scale-90 transition-transform flex items-center justify-center"
+              className="lg:hidden p-2.5 bg-slate-50 text-slate-600 rounded-xl active:scale-90 transition-transform"
             >
-              <Menu size={22} />
+              <Menu size={20} />
             </button>
-            <span className="font-extrabold text-slate-900 tracking-tight text-lg">Academix</span>
+            <div className="flex items-center gap-2">
+              <div className="hidden lg:flex items-center gap-2">
+                <span className="w-1.5 h-5 bg-blue-600 rounded-full"></span>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{activeTab}</span>
+              </div>
+            </div>
           </div>
-        </div>
+          
+          <div className="flex items-center gap-3">
+            <button className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all hidden sm:flex">
+              <Bell size={18} />
+            </button>
+            <div className="w-px h-6 bg-slate-100 mx-1 hidden sm:block"></div>
+            <div className="flex items-center gap-3">
+              <div className="hidden md:flex flex-col items-end mr-1">
+                <p className="text-xs font-black text-slate-900 leading-tight">{userName}</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Administrator</p>
+              </div>
+              <button 
+                onClick={() => setShowLogoutConfirm(true)}
+                className="p-2.5 bg-rose-50 text-rose-500 hover:bg-rose-600 hover:text-white rounded-xl transition-all active:scale-95 shadow-sm group"
+                title="Sign Out"
+              >
+                <LogOut size={18} className="group-hover:scale-110 transition-transform" />
+              </button>
+            </div>
+          </div>
+        </header>
+
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           <div className="w-full max-w-7xl mx-auto px-6 py-8 lg:px-10 lg:py-12">
             {renderContent()}
           </div>
         </div>
       </main>
+
       {showLogoutConfirm && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[9999] flex items-center justify-center p-6">
           <div className="bg-white w-full max-w-[360px] rounded-[2rem] shadow-2xl p-8 text-center animate-in zoom-in-95">

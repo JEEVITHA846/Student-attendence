@@ -1,3 +1,4 @@
+
 import { supabase } from './supabaseClient';
 import { Student, AttendanceRecord } from "../types";
 
@@ -12,13 +13,18 @@ const handleSupabaseError = ({ error, data }: { error: any, data: any }, context
 
 export const StudentAPI = {
   getAll: async (): Promise<Student[]> => {
-    const { data, error } = await supabase.from('students').select('*').order('name', { ascending: true });
+    // Changed order from 'name' to 'created_at' to maintain entry sequence
+    const { data, error } = await supabase.from('students').select('*').order('created_at', { ascending: true });
     return handleSupabaseError({ data, error }, 'getAll students');
   },
   create: async (studentData: Omit<Student, 'id' | 'attendancePercentage'>): Promise<Student> => {
     const { data, error } = await supabase.from('students').insert([studentData]).select();
     const result = handleSupabaseError({ data, error }, 'create student');
     return result[0];
+  },
+  createBatch: async (studentsData: Omit<Student, 'id' | 'attendancePercentage'>[]): Promise<Student[]> => {
+    const { data, error } = await supabase.from('students').insert(studentsData).select();
+    return handleSupabaseError({ data, error }, 'createBatch students');
   },
   update: async (id: string, updates: Partial<Student>): Promise<Student> => {
     const { data, error } = await supabase.from('students').update(updates).eq('id', id).select();

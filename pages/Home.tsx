@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Eye, 
@@ -9,43 +10,48 @@ import {
   Shield, 
   Users, 
   BarChart3, 
-  ChevronRight,
   Mail,
   User,
   MessageSquare,
-  Send
+  Send,
+  Loader2,
+  AlertCircle,
+  KeyRound
 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 
-interface HomeProps {}
+interface HomeProps {
+  initialView?: 'auth' | 'forgot-password' | 'update-password';
+  onCompleteRecovery?: () => void;
+}
 
 type AuthTab = 'login' | 'signup';
-type ViewState = 'auth' | 'forgot-password';
+type ViewState = 'auth' | 'forgot-password' | 'update-password';
 
-const Home: React.FC<HomeProps> = () => {
+const Home: React.FC<HomeProps> = ({ initialView = 'auth', onCompleteRecovery }) => {
   const [activeTab, setActiveTab] = useState<AuthTab>('login');
-  const [view, setView] = useState<ViewState>('auth');
+  const [view, setView] = useState<ViewState>(initialView);
   const [showPassword, setShowPassword] = useState(false);
   
-  // Refs for UX
   const emailInputRef = useRef<HTMLInputElement>(null);
   
-  // Auth Form States
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Contact Form States
-  const [contactName, setContactName] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
-  const [contactMessage, setContactMessage] = useState('');
-  const [contactSubmitted, setContactSubmitted] = useState(false);
+  // Sync with initialView prop if it changes
+  useEffect(() => {
+    if (initialView) {
+      setView(initialView);
+    }
+  }, [initialView]);
 
-  // Smooth scroll helper
   const scrollToId = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
@@ -67,7 +73,6 @@ const Home: React.FC<HomeProps> = () => {
     setSuccessMsg('');
     scrollToId('hero');
     
-    // UX: Auto-focus the first field after a slight delay for the scroll
     setTimeout(() => {
       emailInputRef.current?.focus();
     }, 600);
@@ -77,90 +82,102 @@ const Home: React.FC<HomeProps> = () => {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
+    setIsLoading(true);
 
-    if (view === 'forgot-password') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin,
-        });
-        if (error) setError(error.message);
-        else setSuccessMsg('A password reset link has been sent to your email.');
-        return;
-    }
-
-    if (activeTab === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) setError(error.message);
-        // App.tsx will handle successful login via onAuthStateChange
-    } else { // signup
-        if (!name.trim() || !email.trim() || !password) {
-            setError('All fields are required'); return;
+    try {
+        if (view === 'forgot-password') {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: `${window.location.origin}/`,
+            });
+            if (error) throw error;
+            setSuccessMsg('A password reset link has been sent to your email. Please check your inbox.');
+        } else if (view === 'update-password') {
+            if (newPassword.length < 6) {
+                setError('Password must be at least 6 characters');
+                setIsLoading(false);
+                return;
+            }
+            const { error } = await supabase.auth.updateUser({ password: newPassword });
+            if (error) throw error;
+            setSuccessMsg('Your password has been updated successfully.');
+            
+            setTimeout(() => {
+                if (onCompleteRecovery) {
+                    onCompleteRecovery();
+                }
+                setView('auth');
+                setActiveTab('login');
+                setSuccessMsg('');
+            }, 2500);
+        } else if (activeTab === 'login') {
+            const { error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+        } else {
+            if (!name.trim() || !email.trim() || !password) {
+                setError('All fields are required'); 
+                setIsLoading(false);
+                return;
+            }
+            if (!acceptedTerms) {
+                setError('Please accept the terms and conditions'); 
+                setIsLoading(false);
+                return;
+            }
+            const { error } = await supabase.auth.signUp({
+                email, password,
+                options: { data: { full_name: name } },
+            });
+            if (error) throw error;
+            setSuccessMsg('Please check your email to verify your account.');
         }
-        if (!acceptedTerms) {
-            setError('Please accept the terms and conditions'); return;
-        }
-        const { error } = await supabase.auth.signUp({
-            email, password,
-            options: { data: { full_name: name } },
-        });
-        if (error) setError(error.message);
-        else setSuccessMsg('Please check your email to verify your account.');
-    }
-  };
-
-  const handleContactSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (contactName && contactEmail && contactMessage) {
-      setContactSubmitted(true);
-      setTimeout(() => setContactSubmitted(false), 5000);
-      setContactName('');
-      setContactEmail('');
-      setContactMessage('');
+    } catch (err: any) {
+        setError(err.message || 'An unexpected error occurred');
+    } finally {
+        setIsLoading(false);
     }
   };
 
   const NavLink = ({ children, targetId }: { children?: React.ReactNode; targetId: string }) => (
     <button 
       onClick={() => scrollToId(targetId)}
-      className="text-[#4B5563] hover:text-[#000000] font-medium text-sm transition-colors px-4 py-2 outline-none"
+      className="text-[#4B5563] hover:text-[#000000] font-semibold text-sm transition-colors px-3 py-2 outline-none"
     >
       {children}
     </button>
+  );
+
+  const Logo = () => (
+    <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center shadow-lg shadow-black/10 select-none">
+      <span className="text-white font-black text-xl leading-none">A</span>
+    </div>
   );
 
   const inputClasses = "w-full px-5 py-3.5 bg-white border border-[#E5E7EB] rounded-xl outline-none focus:border-black transition-all text-sm font-medium text-black placeholder:text-[#9CA3AF] [appearance:none] autofill:bg-white autofill:shadow-[0_0_0_30px_white_inset]";
 
   return (
     <div className="min-h-screen bg-white font-['Inter'] selection:bg-black selection:text-white">
-      {/* Header */}
       <header className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md border-b border-[#E5E7EB] z-[100]">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          {/* Logo - Left */}
-          <div className="flex items-center gap-3 shrink-0 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            <div className="w-8 h-8 bg-black rounded flex items-center justify-center">
-              <span className="text-white font-black text-lg">A</span>
-            </div>
-            <span className="text-xl font-bold text-black tracking-tight">Academix</span>
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+            <Logo />
           </div>
 
-          {/* Navigation - Center */}
-          <nav className="hidden md:flex flex-1 items-center justify-center gap-2">
+          <nav className="hidden lg:flex flex-1 items-center justify-center gap-1">
             <NavLink targetId="features">Features</NavLink>
             <NavLink targetId="ai">AI Insights</NavLink>
             <NavLink targetId="how-it-works">How it works</NavLink>
-            <NavLink targetId="contact-section">Contact</NavLink>
           </nav>
 
-          {/* Actions - Right */}
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <button 
               onClick={() => handleHeaderAction('login')}
-              className="px-6 py-2.5 border border-[#E5E7EB] text-black font-bold text-sm rounded-lg hover:bg-[#F9FAFB] transition-all outline-none"
+              className="px-3 sm:px-6 py-2 border border-[#E5E7EB] text-black font-bold text-[11px] sm:text-sm rounded-lg hover:bg-[#F9FAFB] transition-all outline-none whitespace-nowrap"
             >
               Login
             </button>
             <button 
               onClick={() => handleHeaderAction('signup')}
-              className="hidden sm:block px-6 py-2.5 bg-black text-white font-bold text-sm rounded-lg hover:bg-[#111827] transition-all outline-none"
+              className="px-3 sm:px-6 py-2 bg-black text-white font-bold text-[11px] sm:text-sm rounded-lg hover:bg-[#111827] transition-all outline-none whitespace-nowrap"
             >
               Sign Up
             </button>
@@ -168,38 +185,24 @@ const Home: React.FC<HomeProps> = () => {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section id="hero" className="pt-40 pb-24 px-6 max-w-7xl mx-auto overflow-hidden">
+      <section id="hero" className="pt-40 pb-24 px-6 max-w-7xl mx-auto overflow-hidden text-left">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          {/* Left: Heading & Subheading */}
           <div className="space-y-8 animate-in slide-in-from-left-8 duration-700">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#F9FAFB] border border-[#E5E7EB] rounded-full">
               <Zap size={14} className="text-black" />
               <span className="text-[10px] font-black uppercase tracking-widest text-[#4B5563]">Intelligent Education SaaS</span>
             </div>
-            <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold text-black leading-[1.1] tracking-tight text-left">
+            <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold text-black leading-[1.1] tracking-tight">
               Manage student <br />
               <span className="text-[#9CA3AF]">intelligence</span> with <br />
               zero friction.
             </h1>
-            <p className="text-lg text-[#4B5563] max-w-lg leading-relaxed font-medium text-left">
+            <p className="text-lg text-[#4B5563] max-w-lg leading-relaxed font-medium">
               The next generation of attendance tracking and student management. 
               Powered by AI to give you insights that matter, right when you need them.
             </p>
-            <div className="flex items-center gap-6 sm:gap-8 pt-4">
-              <div className="text-left space-y-1">
-                <p className="text-2xl font-bold text-black">99.9%</p>
-                <p className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-widest leading-none">Accuracy</p>
-              </div>
-              <div className="w-px h-8 bg-[#E5E7EB]"></div>
-              <div className="text-left space-y-1">
-                <p className="text-2xl font-bold text-black">10k+</p>
-                <p className="text-[10px] font-black text-[#9CA3AF] uppercase tracking-widest leading-none">Active Users</p>
-              </div>
-            </div>
           </div>
 
-          {/* Right: Authentication Card */}
           <div className="flex justify-center lg:justify-end animate-in fade-in zoom-in-95 duration-700">
             <div className="w-full max-w-[440px] bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.06)] overflow-hidden">
               <div className="p-8 md:p-10">
@@ -245,6 +248,7 @@ const Home: React.FC<HomeProps> = () => {
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             className={inputClasses}
+                            disabled={isLoading}
                           />
                         </div>
                       )}
@@ -258,6 +262,7 @@ const Home: React.FC<HomeProps> = () => {
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           className={inputClasses}
+                          disabled={isLoading}
                         />
                       </div>
 
@@ -272,6 +277,7 @@ const Home: React.FC<HomeProps> = () => {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             className={inputClasses}
+                            disabled={isLoading}
                           />
                           <button 
                             type="button" 
@@ -311,12 +317,12 @@ const Home: React.FC<HomeProps> = () => {
                                   {rememberMe && <Check size={12} className="text-white" strokeWidth={4} />}
                                 </div>
                               </div>
-                              <span className="text-[11px] font-black text-[#9CA3AF] uppercase tracking-widest leading-none">Remember me</span>
+                              <span className="text-[11px] font-black text-[#9ca3af] uppercase tracking-widest leading-none">Remember me</span>
                             </label>
                             <button 
                               type="button" 
                               onClick={() => { setView('forgot-password'); setError(''); setSuccessMsg(''); }}
-                              className="text-[11px] font-black text-[#9CA3AF] uppercase tracking-widest hover:text-black leading-none outline-none"
+                              className="text-[10px] font-bold text-blue-400 hover:text-blue-500 leading-none outline-none"
                             >
                               Forgot password?
                             </button>
@@ -343,13 +349,15 @@ const Home: React.FC<HomeProps> = () => {
 
                       <button 
                         type="submit"
-                        className="w-full py-4 bg-black text-white rounded-xl font-bold text-sm hover:bg-[#111827] transition-all active:scale-[0.98] mt-4 shadow-lg shadow-black/5 outline-none"
+                        disabled={isLoading}
+                        className="w-full py-4 bg-black text-white rounded-xl font-bold text-sm hover:bg-[#111827] transition-all active:scale-[0.98] mt-4 shadow-lg shadow-black/5 outline-none flex items-center justify-center gap-2"
                       >
+                        {isLoading && <Loader2 size={16} className="animate-spin" />}
                         {activeTab === 'login' ? 'Login' : 'Sign Up'}
                       </button>
                     </form>
                   </>
-                ) : (
+                ) : view === 'forgot-password' ? (
                   <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                     <button 
                       onClick={() => setView('auth')}
@@ -369,6 +377,7 @@ const Home: React.FC<HomeProps> = () => {
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           className={inputClasses}
+                          disabled={isLoading}
                         />
                       </div>
                       {error && <p className="text-[11px] font-bold text-rose-500">{error}</p>}
@@ -382,9 +391,67 @@ const Home: React.FC<HomeProps> = () => {
                       )}
                       <button 
                         type="submit"
-                        className="w-full py-4 bg-black text-white rounded-xl font-bold text-sm hover:bg-[#111827] transition-all active:scale-[0.98] outline-none"
+                        disabled={isLoading}
+                        className="w-full py-4 bg-black text-white rounded-xl font-bold text-sm hover:bg-[#111827] transition-all active:scale-[0.98] outline-none flex items-center justify-center gap-2"
                       >
+                        {isLoading && <Loader2 size={16} className="animate-spin" />}
                         Send Reset Link
+                      </button>
+                    </form>
+                  </div>
+                ) : (
+                  <div className="animate-in fade-in slide-in-from-top-4 duration-400">
+                    <div className="flex justify-center mb-6">
+                      <div className="w-16 h-16 bg-black text-white rounded-2xl flex items-center justify-center shadow-xl">
+                        <KeyRound size={32} />
+                      </div>
+                    </div>
+                    <h2 className="text-3xl font-bold text-black tracking-tight mb-2 text-center">New Password</h2>
+                    <p className="text-sm text-[#4B5563] font-medium mb-8 leading-relaxed text-center">Set a secure password for your account.</p>
+                    
+                    <form onSubmit={handleAuthSubmit} className="space-y-6">
+                      <div className="space-y-1.5">
+                        <label className="text-[13px] font-bold text-black ml-1">Choose Password</label>
+                        <div className="relative">
+                          <input 
+                            type={showPassword ? "text" : "password"} 
+                            placeholder="••••••••"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            className={inputClasses}
+                            disabled={isLoading}
+                            required
+                          />
+                          <button 
+                            type="button" 
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-black transition-colors outline-none"
+                          >
+                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {error && (
+                        <div className="bg-rose-50 p-4 border border-rose-100 rounded-xl flex items-center gap-3">
+                           <AlertCircle size={18} className="text-rose-500" />
+                           <p className="text-[11px] font-bold text-rose-600">{error}</p>
+                        </div>
+                      )}
+                      {successMsg && (
+                        <div className="bg-emerald-50 p-4 border border-emerald-100 rounded-xl flex items-center gap-3">
+                           <Check size={18} className="text-emerald-500" />
+                           <p className="text-[11px] font-bold text-emerald-600">{successMsg}</p>
+                        </div>
+                      )}
+                      
+                      <button 
+                        type="submit"
+                        disabled={isLoading}
+                        className="w-full py-4 bg-black text-white rounded-xl font-bold text-sm hover:bg-[#111827] transition-all active:scale-[0.98] outline-none flex items-center justify-center gap-2"
+                      >
+                        {isLoading && <Loader2 size={16} className="animate-spin" />}
+                        Update Password
                       </button>
                     </form>
                   </div>
@@ -395,20 +462,19 @@ const Home: React.FC<HomeProps> = () => {
         </div>
       </section>
 
-      {/* Feature Section */}
       <section id="features" className="py-24 px-6 border-t border-[#E5E7EB]">
         <div className="max-w-7xl mx-auto">
           <div className="max-w-xl mb-16">
             <h2 className="text-4xl font-bold text-black tracking-tight mb-4 text-left">Built for scale. <br />Designed for simplicity.</h2>
             <p className="text-[#4B5563] font-medium leading-relaxed text-left">Everything you need to manage your institution in one clean interface without the complexity of legacy systems.</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
             {[
               { title: 'Smart Attendance', desc: 'automated tracking with intuitive status toggles and batch marking features.', icon: <Users size={24} /> },
               { title: 'Lead Funnel', desc: 'Track admissions and student inquiries with status-based follow-ups and CRM tools.', icon: <BarChart3 size={24} /> },
               { title: 'Data Security', desc: 'Enterprise-grade security and encryption for your sensitive institutional data.', icon: <Shield size={24} /> }
             ].map((feature, i) => (
-              <div key={i} className="bg-white border border-[#E5E7EB] rounded-2xl p-8 hover:border-black transition-all group cursor-default text-left">
+              <div key={i} className="bg-white border border-[#E5E7EB] rounded-2xl p-8 hover:border-black transition-all group cursor-default">
                 <div className="w-12 h-12 bg-black text-white rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                   {feature.icon}
                 </div>
@@ -422,7 +488,6 @@ const Home: React.FC<HomeProps> = () => {
         </div>
       </section>
 
-      {/* AI Section */}
       <section id="ai" className="py-24 bg-[#F9FAFB] border-y border-[#E5E7EB]">
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           <div className="text-left">
@@ -460,7 +525,6 @@ const Home: React.FC<HomeProps> = () => {
         </div>
       </section>
 
-      {/* How it Works */}
       <section id="how-it-works" className="py-24 px-6">
         <div className="max-w-7xl mx-auto text-center mb-20">
           <h2 className="text-4xl font-bold text-black tracking-tight">Three steps to clarity.</h2>
@@ -478,101 +542,21 @@ const Home: React.FC<HomeProps> = () => {
               </div>
               <div>
                 <h3 className="text-xl font-bold text-black mb-2">{item.title}</h3>
-                <p className="text-sm text-[#9CA3AF] font-bold leading-relaxed px-4">{item.desc}</p>
+                <p className="text-sm text-[#9ca3af] font-bold leading-relaxed px-4">{item.desc}</p>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* CTA & Contact Section */}
-      <section id="contact-section" className="py-32 px-6 border-t border-[#E5E7EB]">
-        <div className="max-w-4xl mx-auto space-y-20">
-          <div className="text-center space-y-10">
-            <h2 className="text-5xl font-bold text-black tracking-tight leading-tight">Ready to modernize <br /> your institution?</h2>
-          </div>
-
-          <div className="w-full max-w-2xl mx-auto bg-white border border-[#E5E7EB] rounded-3xl p-8 md:p-12 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.06)]">
-            <div className="mb-10 text-center">
-              <h3 className="text-2xl font-bold text-black tracking-tight mb-2">Get in touch</h3>
-              <p className="text-[#9CA3AF] text-sm font-medium">Have questions? Send us a message and we'll get back to you.</p>
-            </div>
-
-            <form onSubmit={handleContactSubmit} className="space-y-6">
-              <div className="space-y-1.5">
-                <label className="text-[13px] font-bold text-black ml-1 flex items-center gap-2">
-                  <User size={14} className="text-[#9CA3AF]" /> Name
-                </label>
-                <input 
-                  type="text" 
-                  placeholder="Your Full Name"
-                  required
-                  value={contactName}
-                  onChange={(e) => setContactName(e.target.value)}
-                  className={inputClasses}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[13px] font-bold text-black ml-1 flex items-center gap-2">
-                  <Mail size={14} className="text-[#9CA3AF]" /> Email Address
-                </label>
-                <input 
-                  type="email" 
-                  placeholder="name@company.com"
-                  required
-                  value={contactEmail}
-                  onChange={(e) => setContactEmail(e.target.value)}
-                  className={inputClasses}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[13px] font-bold text-black ml-1 flex items-center gap-2">
-                  <MessageSquare size={14} className="text-[#9CA3AF]" /> Message
-                </label>
-                <textarea 
-                  placeholder="How can we help you?"
-                  required
-                  rows={4}
-                  value={contactMessage}
-                  onChange={(e) => setContactMessage(e.target.value)}
-                  className={`${inputClasses} resize-none`}
-                />
-              </div>
-
-              {contactSubmitted && (
-                <div className="bg-[#F9FAFB] p-4 border border-[#E5E7EB] rounded-xl flex items-center gap-3 animate-in fade-in zoom-in-95">
-                   <div className="w-5 h-5 bg-black rounded-full flex items-center justify-center shrink-0">
-                     <Check size={12} className="text-white" />
-                   </div>
-                   <p className="text-[11px] font-bold text-black uppercase tracking-widest">Message sent successfully!</p>
-                </div>
-              )}
-
-              <button 
-                type="submit"
-                className="w-full py-5 bg-black text-white rounded-2xl font-bold text-lg hover:bg-[#111827] transition-all flex items-center justify-center gap-3 active:scale-[0.98] shadow-xl outline-none"
-              >
-                Contact me <Send size={18} />
-              </button>
-            </form>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
       <footer className="py-20 bg-[#F9FAFB] border-t border-[#E5E7EB] px-6">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start gap-12">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start gap-12 text-left">
           <div className="text-left">
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-6 h-6 bg-black rounded flex items-center justify-center">
-                <span className="text-white font-black text-sm">A</span>
-              </div>
-              <span className="text-lg font-bold text-black tracking-tight">Academix</span>
+              <Logo />
             </div>
-            <p className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest leading-relaxed">
-              © 2025 Academix Education Systems.<br />
+            <p className="text-[10px] font-bold text-[#9ca3af] uppercase tracking-widest leading-relaxed">
+              © 2025 Education Systems.<br />
               Premium SaaS Management.
             </p>
           </div>
@@ -583,14 +567,6 @@ const Home: React.FC<HomeProps> = () => {
                 <li><button onClick={() => scrollToId('features')} className="text-[#4B5563] hover:text-black font-medium text-sm transition-colors text-left p-0 border-none bg-transparent block w-full outline-none">Features</button></li>
                 <li><button onClick={() => scrollToId('features')} className="text-[#4B5563] hover:text-black font-medium text-sm transition-colors text-left p-0 border-none bg-transparent block w-full outline-none">Pricing</button></li>
                 <li><button onClick={() => scrollToId('ai')} className="text-[#4B5563] hover:text-black font-medium text-sm transition-colors text-left p-0 border-none bg-transparent block w-full outline-none">Intelligence</button></li>
-              </ul>
-            </div>
-            <div className="space-y-4 text-left">
-              <p className="text-[10px] font-black text-black uppercase tracking-widest text-left">Company</p>
-              <ul className="space-y-2 p-0 m-0 list-none text-left">
-                <li><button onClick={() => scrollToId('contact-section')} className="text-[#4B5563] hover:text-black font-medium text-sm transition-colors text-left p-0 border-none bg-transparent block w-full outline-none">About</button></li>
-                <li><button onClick={() => scrollToId('contact-section')} className="text-[#4B5563] hover:text-black font-medium text-sm transition-colors text-left p-0 border-none bg-transparent block w-full outline-none">Contact</button></li>
-                <li><button onClick={() => scrollToId('contact-section')} className="text-[#4B5563] hover:text-black font-medium text-sm transition-colors text-left p-0 border-none bg-transparent block w-full outline-none">Terms</button></li>
               </ul>
             </div>
           </div>

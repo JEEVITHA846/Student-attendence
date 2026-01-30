@@ -6,8 +6,7 @@ import {
   LogOut,
   History,
   Sparkles,
-  ChevronRight,
-  Briefcase
+  ChevronRight
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -22,7 +21,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, userName, on
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'attendance', label: 'Tracking', icon: CalendarCheck },
     { id: 'history', label: 'Work History', icon: History },
-    { id: 'leads', label: 'Lead Desk', icon: Briefcase },
     { id: 'students', label: 'Students', icon: Users },
   ];
 

@@ -1,3 +1,4 @@
+
 {
   "name": "academix-student-management",
   "private": true,
@@ -9,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
     "@google/genai": "^1.38.0",
     "@supabase/supabase-js": "^2.45.4",
     "lucide-react": "^0.446.0",

@@ -1,6 +1,5 @@
 
 import { GoogleGenAI } from "@google/genai";
-// Updated imports to include Lead type
 import { Student, AttendanceRecord, Lead } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -15,6 +14,23 @@ export const getAttendanceSummary = async (attendance: AttendanceRecord[], stude
     Data: ${JSON.stringify(attendance)}
     Students: ${JSON.stringify(students)}
     Focus on trends, low attendance alerts, and key absentees.`,
+  });
+  return response.text;
+};
+
+/**
+ * Generates a professional follow-up message for a lead.
+ */
+export const generateLeadFollowup = async (lead: Lead) => {
+  // Using gemini-3-flash-preview for quick text generation tasks
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Draft a professional and friendly follow-up message for a prospective student.
+    Name: ${lead.name}
+    Course Interest: ${lead.course}
+    Last Interaction Note: ${lead.notes.length > 0 ? lead.notes[0] : 'None'}
+    
+    Keep it under 60 words and make it suitable for WhatsApp or Email. Do not use markdown symbols like asterisks for bolding.`,
   });
   return response.text;
 };
@@ -47,23 +63,6 @@ export const getAIAssistantResponse = async (
       topK: 40,
       topP: 0.95,
     }
-  });
-  return response.text;
-};
-
-/**
- * Generates an AI follow-up message for a lead.
- * Uses gemini-3-flash-preview for quick drafting.
- */
-export const generateLeadFollowup = async (lead: Lead) => {
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `Draft a personalized and professional follow-up message for a potential student.
-    Lead Name: ${lead.name}
-    Course: ${lead.course}
-    Previous Notes: ${lead.notes.join(', ')}
-    
-    The message should be encouraging and aim to schedule a call or meeting. Keep it concise and professional.`,
   });
   return response.text;
 };

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Search, 
@@ -8,7 +9,9 @@ import {
   UserX,
   UserMinus,
   CheckCircle2,
-  CheckSquare
+  CheckSquare,
+  Edit,
+  XCircle
 } from 'lucide-react';
 import { Student, AttendanceStatus, AttendanceRecord } from '../types';
 import { CLASSES } from '../constants';
@@ -42,6 +45,14 @@ const Attendance: React.FC<AttendanceProps> = ({ students, onSave, editModeData 
       initial[s.id] = existing ? existing.status : AttendanceStatus.PRESENT;
     });
     setMarking(initial);
+
+    if (editModeData?.timestamp) {
+        const periodMatch = editModeData.timestamp.match(/^P([\d,]+)/);
+        if (periodMatch) {
+            const periods = periodMatch[1].split(',').map(Number);
+            setSelectedPeriods(periods);
+        }
+    }
   }, [students, editModeData]);
 
   const handleStatusChange = (student_id: string, status: AttendanceStatus) => {
@@ -89,7 +100,9 @@ const Attendance: React.FC<AttendanceProps> = ({ students, onSave, editModeData 
               <CheckCircle2 size={32} />
             </div>
             <div>
-              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Records Committed</h1>
+              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                {editModeData ? 'Records Updated' : 'Records Committed'}
+              </h1>
               <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">{selectedDate} • {selectedElective}</p>
             </div>
           </div>
@@ -143,7 +156,10 @@ const Attendance: React.FC<AttendanceProps> = ({ students, onSave, editModeData 
                       status === 'Present' ? 'bg-slate-50' : status === 'Absent' ? 'bg-rose-50/50' : 'bg-cyan-50/50'
                     }`}>
                       <p className="text-base font-black text-slate-900 leading-tight">{s?.name}</p>
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1.5">{s?.department}</p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{s?.department}</p>
+                        <span className="text-[12px] font-black text-blue-600 bg-blue-50/50 px-2.5 py-1 rounded-lg border border-blue-100/50 tracking-tight">{s?.roll_no}</span>
+                      </div>
                     </div>
                   );
                 })}
@@ -156,24 +172,41 @@ const Attendance: React.FC<AttendanceProps> = ({ students, onSave, editModeData 
   }
 
   return (
-    <div className="animate-in fade-in duration-500 space-y-8 lg:space-y-10">
+    <div className="animate-in fade-in duration-500 space-y-8 lg:space-y-10 relative">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="w-full md:w-auto">
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Tracking</h1>
-          <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">Attendance Management</p>
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
+            {editModeData ? <Edit className="text-blue-500" /> : null}
+            {editModeData ? 'Modify Session' : 'Tracking'}
+          </h1>
+          <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">
+            {editModeData ? `Editing existing log for ${editModeData.date}` : 'Attendance Management'}
+          </p>
         </div>
-        <button 
-          onClick={handleSubmit}
-          className="w-full md:w-auto px-10 py-4 bg-[#0f172a] text-white rounded-2xl font-bold text-sm shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all"
-        >
-          <Zap size={18} className="text-blue-400 fill-blue-400" />
-          Commit Records
-        </button>
+        
+        {/* Commit Button (Hidden on mobile header, shown on desktop) */}
+        <div className="hidden md:flex items-center gap-3 w-full md:w-auto">
+           {editModeData && (
+             <button 
+                onClick={() => window.location.reload()} 
+                className="flex-1 md:flex-none px-6 py-4 bg-white text-slate-500 rounded-2xl font-bold text-sm border border-slate-100 shadow-sm flex items-center justify-center gap-2 active:scale-95 transition-all"
+              >
+                <XCircle size={18} />
+                Discard
+              </button>
+           )}
+           <button 
+             onClick={handleSubmit}
+             className={`w-full md:w-auto px-10 py-4 ${editModeData ? 'bg-blue-600' : 'bg-[#0f172a]'} text-white rounded-2xl font-bold text-sm shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all`}
+           >
+             <Zap size={18} className={`${editModeData ? 'text-white fill-white' : 'text-blue-400 fill-blue-400'}`} />
+             {editModeData ? 'Save Changes' : 'Commit Records'}
+           </button>
+        </div>
       </div>
 
-      {/* Inputs Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-50 shadow-sm">
+        <div className={`bg-white p-6 rounded-[2rem] border border-slate-50 shadow-sm ${editModeData ? 'opacity-50 pointer-events-none' : ''}`}>
           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Date Selection</label>
           <div className="relative bg-slate-50 rounded-2xl p-4 flex items-center justify-between group">
             <div className="flex items-center gap-3 pointer-events-none">
@@ -192,7 +225,7 @@ const Attendance: React.FC<AttendanceProps> = ({ students, onSave, editModeData 
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-50 shadow-sm">
+        <div className={`bg-white p-6 rounded-[2rem] border border-slate-50 shadow-sm ${editModeData ? 'opacity-50 pointer-events-none' : ''}`}>
           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Assign Periods</label>
           <div className="flex flex-wrap gap-2.5">
             {availablePeriods.map(p => (
@@ -212,7 +245,6 @@ const Attendance: React.FC<AttendanceProps> = ({ students, onSave, editModeData 
         </div>
       </div>
 
-      {/* Toolbar */}
       <div className="flex flex-col sm:flex-row items-center gap-4">
          <div className="relative flex-1 w-full">
             <Search size={18} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -232,11 +264,9 @@ const Attendance: React.FC<AttendanceProps> = ({ students, onSave, editModeData 
          </button>
       </div>
 
-      {/* Student List View */}
-      <div className="space-y-4 pb-24">
+      <div className="space-y-4 pb-32">
         <div className="hidden md:grid md:grid-cols-12 px-10 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest">
-           <div className="col-span-5">Student</div>
-           <div className="col-span-3 text-center">Reference</div>
+           <div className="col-span-8">Student Identity</div>
            <div className="col-span-4 text-right">Attendance Status</div>
         </div>
 
@@ -253,12 +283,13 @@ const Attendance: React.FC<AttendanceProps> = ({ students, onSave, editModeData 
                     </div>
                     <div className="min-w-0">
                       <p className="font-black text-slate-900 text-base leading-tight truncate">{student.name}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 truncate">{student.department}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{student.department}</p>
+                        <span className="text-[12px] font-black text-blue-600 bg-blue-50/50 px-2.5 py-0.5 rounded-lg border border-blue-100/50 tracking-tight">
+                          {student.roll_no}
+                        </span>
+                      </div>
                     </div>
-                 </div>
-
-                 <div className="hidden md:block md:w-32 text-center">
-                    <span className="text-[11px] font-black text-slate-400 tracking-widest">{student.roll_no}</span>
                  </div>
 
                  <div className="flex items-center gap-2 w-full md:w-auto">
@@ -297,6 +328,25 @@ const Attendance: React.FC<AttendanceProps> = ({ students, onSave, editModeData 
             </div>
           )}
         </div>
+      </div>
+
+      {/* Commit Button (Visible only on mobile bottom) */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-lg border-t border-slate-100 z-[60] flex gap-3">
+        {editModeData && (
+          <button 
+            onClick={() => window.location.reload()} 
+            className="flex-1 px-4 py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all"
+          >
+            <XCircle size={18} />
+          </button>
+        )}
+        <button 
+          onClick={handleSubmit}
+          className={`flex-[3] px-10 py-4 ${editModeData ? 'bg-blue-600' : 'bg-[#0f172a]'} text-white rounded-2xl font-bold text-sm shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all`}
+        >
+          <Zap size={18} className={`${editModeData ? 'text-white fill-white' : 'text-blue-400 fill-blue-400'}`} />
+          {editModeData ? 'Save Changes' : 'Commit Records'}
+        </button>
       </div>
     </div>
   );

@@ -6,7 +6,7 @@ export enum AttendanceStatus {
   NOT_MARKED = 'Not Marked'
 }
 
-// Added LeadStatus enum to support Lead Desk features
+// Added LeadStatus enum for student inquiry tracking
 export enum LeadStatus {
   NEW = 'New',
   CONTACTED = 'Contacted',
@@ -23,17 +23,6 @@ export interface Student {
   attendancePercentage: number;
 }
 
-// Added Lead interface for tracking student inquiries
-export interface Lead {
-  id: string;
-  name: string;
-  phone: string;
-  course: string;
-  status: LeadStatus;
-  next_follow_up: string;
-  notes: string[];
-}
-
 export interface AttendanceRecord {
   id: string;
   date: string;
@@ -43,6 +32,17 @@ export interface AttendanceRecord {
   subject: string;
   class: string;
   remark?: string;
+}
+
+// Added Lead interface to support Lead Desk features
+export interface Lead {
+  id: string;
+  name: string;
+  phone: string;
+  course: string;
+  status: LeadStatus;
+  next_follow_up: string;
+  notes: string[];
 }
 
 export interface ChatMessage {
