@@ -57,8 +57,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     }
   };
 
-  // Common input classes to ensure white background and no autofill color
-  const inputClasses = "w-full px-5 py-3.5 bg-white border border-[#e5e7eb] rounded-xl outline-none focus:border-[#111827] transition-all text-sm font-medium text-[#111827] placeholder:text-[#9ca3af] [appearance:none] autofill:bg-white autofill:shadow-[0_0_0_30px_white_inset]";
+  // Common input classes changed to white background
+  const inputClasses = "w-full px-5 py-3.5 bg-white border border-[#e5e7eb] rounded-xl outline-none focus:border-[#111827] transition-all text-sm font-medium text-[#111827] placeholder:text-[#9ca3af] [appearance:none] autofill:bg-white";
 
   const renderHeader = () => {
     switch (view) {
@@ -108,7 +108,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               <label className="text-[13px] font-bold text-[#111827] ml-1">Email</label>
               <input 
                 type="email" 
-                placeholder="Enter your email"
+                placeholder="Email Address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"

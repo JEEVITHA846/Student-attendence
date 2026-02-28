@@ -6,13 +6,6 @@ export enum AttendanceStatus {
   NOT_MARKED = 'Not Marked'
 }
 
-// Added LeadStatus enum for student inquiry tracking
-export enum LeadStatus {
-  NEW = 'New',
-  CONTACTED = 'Contacted',
-  CONVERTED = 'Converted'
-}
-
 export interface Student {
   id: string;
   roll_no: string;
@@ -26,7 +19,7 @@ export interface Student {
 export interface AttendanceRecord {
   id: string;
   date: string;
-  timestamp: string; // To track exact time for folder-like sorting
+  timestamp: string;
   student_id: string;
   status: AttendanceStatus;
   subject: string;
@@ -34,7 +27,26 @@ export interface AttendanceRecord {
   remark?: string;
 }
 
-// Added Lead interface to support Lead Desk features
+export interface DayNote {
+  id: string;
+  date: string;
+  reason: string;
+  created_at?: string;
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
+// Added Lead related types to fix compilation errors in Leads page
+export enum LeadStatus {
+  NEW = 'New',
+  CONTACTED = 'Contacted',
+  CONVERTED = 'Converted'
+}
+
 export interface Lead {
   id: string;
   name: string;
@@ -43,10 +55,4 @@ export interface Lead {
   status: LeadStatus;
   next_follow_up: string;
   notes: string[];
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
 }

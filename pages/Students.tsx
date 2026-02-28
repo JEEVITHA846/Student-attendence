@@ -1,35 +1,33 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Search, 
   UserPlus, 
   Trash2, 
   Edit3, 
   X,
-  FileUp,
-  AlertCircle,
-  CheckCircle
+  PieChart,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
-import { Student } from '../types';
+import { Student, AttendanceRecord } from '../types';
 import { DEPARTMENTS } from '../constants';
 
 interface StudentsProps {
   students: Student[];
-  onAdd: (student: Omit<Student, 'id' | 'attendancePercentage'>) => void;
-  onUpdate: (id: string, updates: Partial<Student>) => void;
-  onDelete: (id: string) => void;
-  onImport: (students: Omit<Student, 'id' | 'attendancePercentage'>[]) => void;
+  attendance: AttendanceRecord[];
+  onAdd: (student: Omit<Student, 'id' | 'attendancePercentage'>) => Promise<void>;
+  onUpdate: (id: string, updates: Partial<Student>) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }
 
-const Students: React.FC<StudentsProps> = ({ students, onAdd, onUpdate, onDelete, onImport }) => {
+const Students: React.FC<StudentsProps> = ({ students, attendance, onAdd, onUpdate, onDelete }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [importData, setImportData] = useState<Omit<Student, 'id' | 'attendancePercentage'>[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [formData, setFormData] = useState<{
     name: string;
     roll_no: string;
@@ -44,7 +42,22 @@ const Students: React.FC<StudentsProps> = ({ students, onAdd, onUpdate, onDelete
     status: 'Active'
   });
 
+  const studentStats = useMemo(() => {
+    return students.map(student => {
+      const studentAttendance = attendance.filter(a => a.student_id === student.id);
+      const totalSessions = new Set(attendance.map(a => `${a.date}-${a.timestamp}`)).size;
+      const presentCount = studentAttendance.filter(a => a.status === 'Present').length;
+      const percentage = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 100;
+
+      return {
+        ...student,
+        calculatedPercentage: percentage
+      };
+    });
+  }, [students, attendance]);
+
   const handleEditClick = (student: Student) => {
+    setFormError(null);
     setEditingStudentId(student.id);
     setFormData({
       name: student.name,
@@ -57,76 +70,39 @@ const Students: React.FC<StudentsProps> = ({ students, onAdd, onUpdate, onDelete
   };
 
   const handleAddClick = () => {
+    setFormError(null);
     setEditingStudentId(null);
     setFormData({ name: '', roll_no: '', department: DEPARTMENTS[0], year: 1, status: 'Active' });
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingStudentId) {
-      onUpdate(editingStudentId, formData);
-    } else {
-      onAdd(formData);
-    }
-    setIsModalOpen(false);
-    setEditingStudentId(null);
-    setFormData({ name: '', roll_no: '', department: DEPARTMENTS[0], year: 1, status: 'Active' });
-  };
-
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const rows = text.split('\n');
-      const parsedData: Omit<Student, 'id' | 'attendancePercentage'>[] = [];
-
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i].trim();
-        if (!row) continue;
-        
-        const cols = row.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-        if (cols.length >= 2) {
-          parsedData.push({
-            name: cols[0],
-            roll_no: cols[1],
-            department: cols[2] || DEPARTMENTS[0],
-            year: parseInt(cols[3]) || 1,
-            status: 'Active'
-          });
-        }
-      }
-
-      if (parsedData.length > 0) {
-        setImportData(parsedData);
-        setIsPreviewModalOpen(true);
+    setIsSubmitting(true);
+    setFormError(null);
+    try {
+      if (editingStudentId) {
+        await onUpdate(editingStudentId, formData);
       } else {
-        alert("No valid data found in CSV. Use format: name, roll_no, department, year");
+        await onAdd(formData);
       }
-      
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    };
-    reader.readAsText(file);
+      setIsModalOpen(false);
+      setEditingStudentId(null);
+    } catch (err: any) {
+      setFormError(err.message || "Failed to save student record.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const confirmImport = () => {
-    onImport(importData);
-    setIsPreviewModalOpen(false);
-    setImportData([]);
-  };
-
-  const filteredStudents = students.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    s.roll_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.department.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Robust null-safe filter to prevent crashes if database has null values
+  const filteredStudents = studentStats.filter(s => {
+    const search = searchTerm.toLowerCase();
+    const name = (s.name || '').toLowerCase();
+    const roll = (s.roll_no || '').toLowerCase();
+    const dept = (s.department || '').toLowerCase();
+    return name.includes(search) || roll.includes(search) || dept.includes(search);
+  });
 
   return (
     <div className="animate-in fade-in duration-500 space-y-10 pb-20">
@@ -140,20 +116,6 @@ const Students: React.FC<StudentsProps> = ({ students, onAdd, onUpdate, onDelete
         </div>
         
         <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
-          <input 
-            type="file" 
-            accept=".csv" 
-            className="hidden" 
-            ref={fileInputRef} 
-            onChange={handleFileChange}
-          />
-          <button 
-            onClick={handleImportClick}
-            className="flex-1 md:flex-none px-6 h-[56px] bg-white text-slate-600 border border-slate-200 rounded-2xl font-bold text-sm shadow-sm flex items-center justify-center gap-3 active:scale-95 transition-all hover:bg-slate-50 hover:border-slate-300 whitespace-nowrap"
-          >
-            <FileUp size={20} className="text-blue-500" />
-            Import CSV
-          </button>
           <button 
             onClick={handleAddClick}
             className="flex-1 md:flex-none px-8 h-[56px] bg-blue-600 text-white rounded-2xl font-bold text-sm shadow-xl shadow-blue-600/20 flex items-center justify-center gap-3 active:scale-95 transition-all hover:bg-blue-700 whitespace-nowrap"
@@ -182,6 +144,7 @@ const Students: React.FC<StudentsProps> = ({ students, onAdd, onUpdate, onDelete
               <tr>
                 <th className="px-10 py-6 text-[11px] font-black text-slate-400 uppercase tracking-widest">Student Identity</th>
                 <th className="px-10 py-6 text-[11px] font-black text-slate-400 uppercase tracking-widest">Reference ID</th>
+                <th className="px-10 py-6 text-[11px] font-black text-slate-400 uppercase tracking-widest text-center">Attendance</th>
                 <th className="px-10 py-6 text-[11px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
                 <th className="px-10 py-6 text-[11px] font-black text-slate-400 uppercase tracking-widest text-right">Controls</th>
               </tr>
@@ -192,16 +155,29 @@ const Students: React.FC<StudentsProps> = ({ students, onAdd, onUpdate, onDelete
                   <td className="px-10 py-6">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-sm uppercase shadow-sm shrink-0">
-                        {student.name.charAt(0)}
+                        {student.name ? student.name.charAt(0) : '?'}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-black text-slate-900 text-sm leading-tight truncate">{student.name}</p>
+                        <p className="font-black text-slate-900 text-sm leading-tight truncate">{student.name || 'Unknown'}</p>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 truncate">{student.department}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-10 py-6">
                     <span className="text-[11px] font-black text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg tracking-widest">{student.roll_no}</span>
+                  </td>
+                  <td className="px-10 py-6">
+                    <div className="flex flex-col items-center gap-1.5">
+                       <span className={`text-[11px] font-black ${student.calculatedPercentage < 75 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                         {student.calculatedPercentage}%
+                       </span>
+                       <div className="w-16 h-1 bg-slate-100 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full ${student.calculatedPercentage < 75 ? 'bg-rose-500' : 'bg-emerald-500'}`} 
+                            style={{ width: `${student.calculatedPercentage}%` }}
+                          />
+                       </div>
+                    </div>
                   </td>
                   <td className="px-10 py-6 text-center">
                     <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
@@ -243,18 +219,18 @@ const Students: React.FC<StudentsProps> = ({ students, onAdd, onUpdate, onDelete
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-xs uppercase shadow-sm">
-                    {student.name.charAt(0)}
+                    {student.name ? student.name.charAt(0) : '?'}
                   </div>
                   <div>
-                    <p className="font-black text-slate-900 text-sm leading-tight">{student.name}</p>
+                    <p className="font-black text-slate-900 text-sm leading-tight">{student.name || 'Unknown'}</p>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{student.department}</p>
                   </div>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${
-                  student.status === 'Active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'
-                }`}>
-                  {student.status}
-                </span>
+                <div className="text-right">
+                   <p className={`text-[11px] font-black ${student.calculatedPercentage < 75 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      {student.calculatedPercentage}% Att.
+                   </p>
+                </div>
               </div>
               <div className="flex items-center justify-between pt-2">
                 <span className="text-[10px] font-black text-slate-400 tracking-widest">{student.roll_no}</span>
@@ -278,6 +254,12 @@ const Students: React.FC<StudentsProps> = ({ students, onAdd, onUpdate, onDelete
               <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-900"><X size={24} /></button>
             </div>
             <form onSubmit={handleSubmit} className="p-8 space-y-6">
+              {formError && (
+                <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600 text-xs font-bold">
+                  <AlertCircle size={18} />
+                  {formError}
+                </div>
+              )}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
                 <input 
@@ -286,6 +268,7 @@ const Students: React.FC<StudentsProps> = ({ students, onAdd, onUpdate, onDelete
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                   className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-600/10"
+                  disabled={isSubmitting}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -297,6 +280,7 @@ const Students: React.FC<StudentsProps> = ({ students, onAdd, onUpdate, onDelete
                     value={formData.roll_no}
                     onChange={e => setFormData({ ...formData, roll_no: e.target.value })}
                     className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none"
+                    disabled={isSubmitting}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -305,47 +289,21 @@ const Students: React.FC<StudentsProps> = ({ students, onAdd, onUpdate, onDelete
                     value={formData.department}
                     onChange={e => setFormData({ ...formData, department: e.target.value })}
                     className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold outline-none appearance-none cursor-pointer"
+                    disabled={isSubmitting}
                   >
                     {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
               </div>
-              <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black shadow-xl shadow-blue-600/20 active:scale-95 transition-transform mt-4">
+              <button 
+                type="submit" 
+                disabled={isSubmitting}
+                className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black shadow-xl shadow-blue-600/20 active:scale-95 transition-transform mt-4 flex items-center justify-center gap-3 disabled:opacity-50"
+              >
+                {isSubmitting && <Loader2 size={20} className="animate-spin" />}
                 {editingStudentId ? 'Update Record' : 'Create Record'}
               </button>
             </form>
-          </div>
-        </div>
-      )}
-
-      {isPreviewModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
-          <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[80vh]">
-            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">CSV Preview</h2>
-              <button onClick={() => setIsPreviewModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-900"><X size={24} /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-8 space-y-4 custom-scrollbar">
-              <div className="flex items-center gap-3 p-4 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100">
-                <AlertCircle size={20} />
-                <p className="text-xs font-bold">Found {importData.length} students. Review before importing.</p>
-              </div>
-              <div className="divide-y divide-slate-50">
-                {importData.map((s, i) => (
-                  <div key={i} className="py-4 flex items-center justify-between">
-                    <div>
-                      <p className="font-black text-slate-900 text-sm">{s.name}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{s.department} • {s.roll_no}</p>
-                    </div>
-                    <CheckCircle size={18} className="text-emerald-500" />
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="p-8 border-t border-slate-50 flex gap-4">
-               <button onClick={() => setIsPreviewModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 font-bold rounded-2xl">Cancel</button>
-               <button onClick={confirmImport} className="flex-1 py-4 bg-blue-600 text-white font-bold rounded-2xl shadow-lg">Confirm Import</button>
-            </div>
           </div>
         </div>
       )}

@@ -2,12 +2,24 @@
 import { GoogleGenAI } from "@google/genai";
 import { Student, AttendanceRecord, Lead } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+let aiInstance: GoogleGenAI | null = null;
+
+const getAI = () => {
+  if (!aiInstance) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY is not set in the environment.");
+    }
+    aiInstance = new GoogleGenAI({ apiKey });
+  }
+  return aiInstance;
+};
 
 /**
  * Analyzes attendance data and provides a human-readable summary.
  */
 export const getAttendanceSummary = async (attendance: AttendanceRecord[], students: Student[]) => {
+  const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Analyze this attendance data and provide a concise human-readable summary.
@@ -19,29 +31,13 @@ export const getAttendanceSummary = async (attendance: AttendanceRecord[], stude
 };
 
 /**
- * Generates a professional follow-up message for a lead.
- */
-export const generateLeadFollowup = async (lead: Lead) => {
-  // Using gemini-3-flash-preview for quick text generation tasks
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `Draft a professional and friendly follow-up message for a prospective student.
-    Name: ${lead.name}
-    Course Interest: ${lead.course}
-    Last Interaction Note: ${lead.notes.length > 0 ? lead.notes[0] : 'None'}
-    
-    Keep it under 60 words and make it suitable for WhatsApp or Email. Do not use markdown symbols like asterisks for bolding.`,
-  });
-  return response.text;
-};
-
-/**
  * Deep insights assistant with refined system instructions.
  */
 export const getAIAssistantResponse = async (
   query: string, 
   data: { students: Student[], attendance: AttendanceRecord[], currentDate: string }
 ) => {
+  const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: `You are an academic assistant for Academix.
@@ -63,6 +59,22 @@ export const getAIAssistantResponse = async (
       topK: 40,
       topP: 0.95,
     }
+  });
+  return response.text;
+};
+
+/**
+ * Generates a followup message for a lead using AI.
+ */
+export const generateLeadFollowup = async (lead: Lead) => {
+  const ai = getAI();
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Generate a short, friendly professional follow-up message for a student lead.
+    Lead Name: ${lead.name}
+    Course Interest: ${lead.course}
+    Last Notes: ${JSON.stringify(lead.notes)}
+    The message should be suitable for WhatsApp or Email.`,
   });
   return response.text;
 };

@@ -1,17 +1,18 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import Attendance from './pages/Attendance';
 import Students from './pages/Students';
 import HistoryPage from './pages/History';
 import AIAssistant from './pages/AIAssistant';
+import DayNotes from './pages/DayNotes';
 import Home from './pages/Home';
-import { Student, AttendanceRecord } from './types';
-import { AlertTriangle, Loader2, Menu, LogOut, Bell } from 'lucide-react';
+import { Student, AttendanceRecord, DayNote } from './types';
+import { AlertTriangle, Loader2, Menu, LogOut } from 'lucide-react';
 
 import { supabase } from './services/supabaseClient';
-import { StudentAPI, AttendanceAPI } from './services/apiService';
+import { StudentAPI, AttendanceAPI, DayNoteAPI } from './services/apiService';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
@@ -22,6 +23,7 @@ const App: React.FC = () => {
   
   const [students, setStudents] = useState<Student[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [dayNotes, setDayNotes] = useState<DayNote[]>([]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -32,77 +34,125 @@ const App: React.FC = () => {
     records: AttendanceRecord[]
   } | null>(null);
 
-  useEffect(() => {
-    // Initial session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUserName(session?.user?.user_metadata?.full_name || session?.user?.email || '');
-      setLoading(false);
-    });
+  const clearData = () => {
+    setStudents([]);
+    setAttendanceRecords([]);
+    setDayNotes([]);
+  };
 
-    // Listen for auth changes, specifically PASSWORD_RECOVERY
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setIsRecovering(true);
-      }
-      if (event === 'SIGNED_OUT') {
-        setIsRecovering(false);
-      }
-      setSession(session);
-      setUserName(session?.user?.user_metadata?.full_name || session?.user?.email || '');
-    });
-
-    return () => subscription.unsubscribe();
+  const fetchData = useCallback(async (userId: string) => {
+    if (!userId) return;
+    try {
+      const [studentsData, attendanceData, notesData] = await Promise.all([
+        StudentAPI.getAll(userId),
+        AttendanceAPI.getAll(userId),
+        DayNoteAPI.getAll(userId)
+      ]);
+      setStudents(studentsData || []);
+      setAttendanceRecords(attendanceData || []);
+      setDayNotes(notesData || []);
+    } catch (error) {
+      console.error("Failed to fetch app data:", error);
+    }
   }, []);
 
   useEffect(() => {
-    if (session && !isRecovering) {
-      const fetchData = async () => {
-        try {
-          const [studentsData, attendanceData] = await Promise.all([
-            StudentAPI.getAll(),
-            AttendanceAPI.getAll(),
-          ]);
-          setStudents(studentsData || []);
-          setAttendanceRecords(attendanceData || []);
-        } catch (error) {
-          console.error("Failed to fetch initial data:", error);
-        }
-      };
-      fetchData();
-    }
-  }, [session, isRecovering]);
+    const checkInitialHash = () => {
+      const hash = window.location.hash;
+      if (hash.includes('type=recovery') || hash.includes('access_token=')) {
+        setIsRecovering(true);
+        return true;
+      }
+      return false;
+    };
 
-  const handleSaveAttendance = async (newRecords: Omit<AttendanceRecord, 'id'>[]) => {
+    const isCurrentlyRecovering = checkInitialHash();
+
+    const checkSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error || !session) {
+          if (!isCurrentlyRecovering) {
+            setSession(null);
+            clearData();
+          }
+        } else {
+          setSession(session);
+          setUserName(session?.user?.user_metadata?.full_name || session?.user?.email || '');
+          fetchData(session.user.id);
+        }
+      } catch (err) {
+        console.error("Session check error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Supabase Auth Event:", event);
+      
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecovering(true);
+      }
+      
+      if (event === 'SIGNED_OUT') {
+        setIsRecovering(false);
+        setSession(null);
+        setUserName('');
+        setActiveTab('dashboard');
+        clearData();
+      }
+      
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session) {
+          setSession(session);
+          setUserName(session?.user?.user_metadata?.full_name || session?.user?.email || '');
+          fetchData(session.user.id);
+        }
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [fetchData]);
+
+  const handleSaveAttendance = useCallback(async (newRecords: Omit<AttendanceRecord, 'id'>[]) => {
+    if (!session?.user?.id) return;
     try {
       if (editingSessionData) {
-        await AttendanceAPI.deleteSession(editingSessionData.date, editingSessionData.timestamp);
-        setEditingSessionData(null);
+        await AttendanceAPI.deleteSession(editingSessionData.date, editingSessionData.timestamp, session.user.id);
       }
-      await AttendanceAPI.saveBatch(newRecords);
-      const freshRecords = await AttendanceAPI.getAll();
-      setAttendanceRecords(freshRecords);
+      await AttendanceAPI.saveBatch(newRecords, session.user.id);
+      await fetchData(session.user.id);
+      setEditingSessionData(null);
     } catch (error) {
       console.error("Failed to save attendance:", error);
+      throw error;
     }
+  }, [editingSessionData, fetchData, session]);
+
+  const handleAddDayNote = async (note: Omit<DayNote, 'id'>) => {
+    if (!session?.user?.id) return;
+    const newNote = await DayNoteAPI.create(note, session.user.id);
+    setDayNotes(prev => [newNote, ...prev]);
   };
 
-  const handleImportStudents = async (newStudents: Omit<Student, 'id' | 'attendancePercentage'>[]) => {
-    try {
-      const addedStudents = await StudentAPI.createBatch(newStudents);
-      setStudents(prev => [...prev, ...addedStudents]);
-    } catch (error) {
-      console.error("Failed to import students:", error);
-    }
+  const handleDeleteDayNote = async (id: string) => {
+    await DayNoteAPI.delete(id);
+    setDayNotes(prev => prev.filter(n => n.id !== id));
   };
 
   const handleDeleteFolder = async (date: string) => {
-    await AttendanceAPI.deleteFolder(date);
+    if (!session?.user?.id) return;
+    await AttendanceAPI.deleteFolder(date, session.user.id);
     setAttendanceRecords(prev => prev.filter(r => r.date !== date));
   };
 
   const handleDeleteSession = async (date: string, timestamp: string) => {
-    await AttendanceAPI.deleteSession(date, timestamp);
+    if (!session?.user?.id) return;
+    await AttendanceAPI.deleteSession(date, timestamp, session.user.id);
     setAttendanceRecords(prev => prev.filter(r => !(r.date === date && r.timestamp === timestamp)));
   };
 
@@ -115,7 +165,8 @@ const App: React.FC = () => {
   };
 
   const handleAddStudent = async (student: Omit<Student, 'id' | 'attendancePercentage'>) => {
-    const newStudent = await StudentAPI.create(student);
+    if (!session?.user?.id) return;
+    const newStudent = await StudentAPI.create(student, session.user.id);
     setStudents(prev => [...prev, newStudent]);
   };
 
@@ -133,8 +184,6 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setShowLogoutConfirm(false);
-    setActiveTab('dashboard');
-    setIsRecovering(false);
   };
 
   if (loading) {
@@ -145,10 +194,22 @@ const App: React.FC = () => {
     );
   }
 
-  // If we are recovering a password, force the Home component to stay mounted
-  // regardless of whether there is a session or not.
-  if (!session || isRecovering) {
-    return <Home initialView={isRecovering ? 'update-password' : 'auth'} onCompleteRecovery={() => setIsRecovering(false)} />;
+  if (isRecovering) {
+    return (
+      <Home 
+        initialView="update-password"
+        onCompleteRecovery={() => {
+          setIsRecovering(false);
+          setActiveTab('dashboard');
+        }} 
+      />
+    );
+  }
+
+  if (!session) {
+    return (
+      <Home initialView='auth' />
+    );
   }
 
   const renderContent = () => {
@@ -165,6 +226,10 @@ const App: React.FC = () => {
         return <Attendance 
           students={students} 
           onSave={handleSaveAttendance} 
+          onNavigateHome={() => {
+            setEditingSessionData(null);
+            setActiveTab('dashboard');
+          }}
           editModeData={editingSessionData || undefined}
         />;
       case 'history':
@@ -175,13 +240,19 @@ const App: React.FC = () => {
           onDeleteSession={handleDeleteSession}
           onEditSession={handleEditSession}
         />;
+      case 'day-notes':
+        return <DayNotes 
+          notes={dayNotes} 
+          onAdd={handleAddDayNote} 
+          onDelete={handleDeleteDayNote} 
+        />;
       case 'students':
         return <Students 
           students={students} 
+          attendance={attendanceRecords}
           onAdd={handleAddStudent} 
           onUpdate={handleUpdateStudent}
           onDelete={handleDeleteStudent} 
-          onImport={handleImportStudents}
         />;
       case 'ai':
         return <AIAssistant students={students} attendance={attendanceRecords} />;
@@ -226,31 +297,18 @@ const App: React.FC = () => {
               <Menu size={20} />
             </button>
             <div className="flex items-center gap-2">
-              <div className="hidden lg:flex items-center gap-2">
-                <span className="w-1.5 h-5 bg-blue-600 rounded-full"></span>
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{activeTab}</span>
-              </div>
+              <span className="w-1.5 h-5 bg-blue-600 rounded-full"></span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{activeTab}</span>
             </div>
           </div>
           
           <div className="flex items-center gap-3">
-            <button className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all hidden sm:flex">
-              <Bell size={18} />
+            <button 
+              onClick={() => setShowLogoutConfirm(true)}
+              className="p-2.5 bg-rose-50 text-rose-500 hover:bg-rose-600 hover:text-white rounded-xl transition-all active:scale-95 shadow-sm group"
+            >
+              <LogOut size={18} />
             </button>
-            <div className="w-px h-6 bg-slate-100 mx-1 hidden sm:block"></div>
-            <div className="flex items-center gap-3">
-              <div className="hidden md:flex flex-col items-end mr-1">
-                <p className="text-xs font-black text-slate-900 leading-tight">{userName}</p>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Administrator</p>
-              </div>
-              <button 
-                onClick={() => setShowLogoutConfirm(true)}
-                className="p-2.5 bg-rose-50 text-rose-500 hover:bg-rose-600 hover:text-white rounded-xl transition-all active:scale-95 shadow-sm group"
-                title="Sign Out"
-              >
-                <LogOut size={18} className="group-hover:scale-110 transition-transform" />
-              </button>
-            </div>
           </div>
         </header>
 

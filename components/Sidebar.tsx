@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { 
   LayoutDashboard, 
@@ -6,7 +7,8 @@ import {
   LogOut,
   History,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  ClipboardList
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -21,6 +23,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, userName, on
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'attendance', label: 'Tracking', icon: CalendarCheck },
     { id: 'history', label: 'Work History', icon: History },
+    { id: 'day-notes', label: 'Day Notes', icon: ClipboardList },
     { id: 'students', label: 'Students', icon: Users },
   ];
 
@@ -29,7 +32,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, userName, on
   ];
 
   const getInitials = (name: string) => {
-    return name
+    return (name || 'User')
       .split(' ')
       .map(n => n[0])
       .join('')
@@ -39,7 +42,15 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, userName, on
 
   return (
     <div className="w-64 bg-[#0f172a] h-screen text-white flex flex-col z-50 shadow-2xl">
-      <div className="p-8 pb-10 flex items-center">
+      <div className="p-8 pb-10 flex items-center gap-3">
+        <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center shadow-inner overflow-hidden">
+          <img 
+            src="https://cdn-icons-png.flaticon.com/512/2997/2997495.png" 
+            alt="Academix Logo" 
+            className="w-7 h-7"
+            referrerPolicy="no-referrer"
+          />
+        </div>
         <span className="text-2xl font-extrabold tracking-tight text-white select-none">Academix</span>
       </div>
 
@@ -90,7 +101,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, userName, on
       <div className="p-4 border-t border-slate-800/50">
         <div className="mb-4 bg-slate-900/50 rounded-2xl p-3 border border-slate-800/50 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-black text-xs text-white shadow-lg">
-            {getInitials(userName || 'User')}
+            {getInitials(userName)}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold truncate leading-tight">{userName || 'Administrator'}</p>
